@@ -314,13 +314,7 @@
         Html5QrcodeSupportedFormats.CODABAR
       ]
     };
-    var camConstraints = {
-      facingMode: 'environment',
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      advanced: [{ focusMode: 'continuous' }]
-    };
-    html5qr.start(camConstraints, config,
+    html5qr.start({ facingMode: 'environment' }, config,
       (decoded)=>{ addRecord(decoded); },
       ()=>{}
     ).then(()=>{
