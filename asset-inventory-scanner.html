@@ -298,8 +298,10 @@
     if(!window.Html5Qrcode){ toast('스캐너 로딩 실패(인터넷 확인)','bad'); return; }
     html5qr = new Html5Qrcode('reader');
     const config = {
-      fps: 10,
-      qrbox: { width: 260, height: 140 },
+      fps: 15,
+      qrbox: function(vw, vh){ var w = Math.max(200, Math.min(vw - 24, 380)); return { width: w, height: Math.round(w*0.55) }; },
+      aspectRatio: 1.0,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
       formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39,
@@ -312,7 +314,13 @@
         Html5QrcodeSupportedFormats.CODABAR
       ]
     };
-    html5qr.start({ facingMode: 'environment' }, config,
+    var camConstraints = {
+      facingMode: 'environment',
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      advanced: [{ focusMode: 'continuous' }]
+    };
+    html5qr.start(camConstraints, config,
       (decoded)=>{ addRecord(decoded); },
       ()=>{}
     ).then(()=>{
