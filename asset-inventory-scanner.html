@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>자산 실사 스캐너</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --line: #e6e8eb; --text: #1f2329;
+    --sub: #6b7280; --accent: #2f6fed; --accent-d: #1f55c4;
+    --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    background: var(--bg); color: var(--text); padding-bottom: 96px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 20; background: var(--accent);
+    color: #fff; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 700; }
+  header p { margin: 2px 0 0; font-size: 12px; opacity: .85; }
+  .wrap { padding: 14px; max-width: 720px; margin: 0 auto; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; display:flex; align-items:center; gap:6px;}
+  label { display:block; font-size: 12px; color: var(--sub); margin: 8px 0 4px; font-weight:600;}
+  input, select, textarea {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
+    font-size: 15px; background: #fff; color: var(--text); outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button {
+    border: none; border-radius: 10px; padding: 12px 14px; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: .15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; width: 100%; }
+  .btn-primary:active { background: var(--accent-d); }
+  .btn-ghost { background: #eef2ff; color: var(--accent); }
+  .btn-line { background: #fff; border: 1px solid var(--line); color: var(--text); }
+  .btn-danger { background: #fee2e2; color: var(--bad); }
+  #reader { width: 100%; border-radius: 12px; overflow: hidden; }
+  .scan-status {
+    text-align:center; font-size: 13px; color: var(--sub); margin-top: 8px; min-height: 18px;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; z-index: 50; opacity: 0; transition: .25s; pointer-events:none;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  .toast.show { opacity: 1; bottom: 124px; }
+  .toast.ok { background: var(--ok); } .toast.bad { background: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top;}
+  th { color: var(--sub); font-size: 11px; text-transform: none; }
+  td .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight:700; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700;}
+  .pill.ok{background:#dcfce7;color:#166534;} .pill.bad{background:#fee2e2;color:#991b1b;}
+  .pill.mid{background:#fef3c7;color:#92400e;} .pill.move{background:#dbeafe;color:#1e40af;}
+  .count-bar { display:flex; gap:10px; margin-bottom:12px; }
+  .stat { flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center;}
+  .stat .n { font-size:22px; font-weight:800; color:var(--accent);}
+  .stat .l { font-size:11px; color:var(--sub); margin-top:2px;}
+  .footer-bar {
+    position: fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:10px; z-index:30;
+  }
+  .footer-bar button { flex:1; }
+  .small { font-size: 11px; color: var(--sub); line-height:1.5; }
+  details.adv summary { cursor:pointer; font-size:13px; font-weight:700; color:var(--accent); }
+  .hidden { display:none !important; }
+  .del { color: var(--bad); cursor:pointer; font-size:12px; background:none; padding:4px; font-weight:700;}
+  select.st { padding:5px 6px; font-size:12px; border-radius:8px;}
+  .edit-in { padding:5px 6px; font-size:12px; border-radius:8px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📦 자산 실사 스캐너</h1>
+  <p>1D 바코드 스캔 → 실사 기록 → Notion 내보내기</p>
+</header>
+<div class="wrap">
+
+  <!-- 설정 -->
+  <div class="card">
+    <h2>⚙️ 실사 정보</h2>
+    <div class="row">
+      <div><label>실사자</label><input id="inspector" placeholder="예: 송윤철" /></div>
+      <div><label>기본 위치/장소</label><input id="location" placeholder="예: 부산 3층" /></div>
+    </div>
+    <label>기본 상태</label>
+    <select id="defaultStatus">
+      <option value="정상">정상</option>
+      <option value="파손">파손</option>
+      <option value="이동필요">이동필요</option>
+      <option value="미확인">미확인</option>
+    </select>
+    <details class="adv" style="margin-top:12px;">
+      <summary>🔗 자동 기록(Webhook) 설정 — 선택</summary>
+      <label style="margin-top:8px;">Webhook URL (n8n / 서버 릴레이)</label>
+      <input id="webhook" placeholder="https://...  (비워두면 로컬 저장만)" />
+      <p class="small">입력 시 스캔할 때마다 이 주소로 JSON이 전송됩니다. 비워두면 폰에 저장 후 CSV로 내보내 Notion에 가져오기 하면 됩니다.</p>
+    </details>
+  </div>
+
+  <!-- 스캐너 -->
+  <div class="card">
+    <h2>📷 바코드 스캔</h2>
+    <div id="reader"></div>
+    <div class="scan-status" id="scanStatus">아래 버튼을 눌러 카메라를 시작하세요.</div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-primary" id="startBtn">카메라 시작</button>
+      <button class="btn-line hidden" id="stopBtn">정지</button>
+    </div>
+    <details class="adv" style="margin-top:12px;">
+      <summary>⌨️ 수동 입력 / 블루투스 스캐너</summary>
+      <p class="small">블루투스 바코드 스캐너는 키보드처럼 입력됩니다. 아래 칸에 스캔하거나 직접 입력 후 추가하세요.</p>
+      <div class="row" style="margin-top:6px;">
+        <input id="manualCode" placeholder="자산번호 입력" />
+        <button class="btn-ghost" id="manualAdd" style="flex:0 0 80px;">추가</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- 기록 -->
+  <div class="count-bar">
+    <div class="stat"><div class="n" id="cntTotal">0</div><div class="l">총 스캔</div></div>
+    <div class="stat"><div class="n" id="cntUniq">0</div><div class="l">고유 자산</div></div>
+    <div class="stat"><div class="n" id="cntIssue">0</div><div class="l">이슈(파손/이동/미확인)</div></div>
+  </div>
+  <div class="card">
+    <h2>📝 실사 기록 <span class="small" style="font-weight:400;" id="savedNote"></span></h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>자산번호</th><th>상태</th><th>위치</th><th>시각</th><th></th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="small" id="emptyNote">아직 기록이 없습니다.</p>
+  </div>
+
+  <p class="small">※ 데이터는 이 기기(브라우저)에 저장됩니다. 실사 종료 후 <b>CSV 내보내기</b>로 Notion DB에 가져오기(Import) 하세요. 컬럼명은 Notion 속성과 동일하게 맞춰져 있습니다.</p>
+</div>
+
+<!-- 하단 액션 -->
+<div class="footer-bar">
+  <button class="btn-ghost" id="exportCsv">⬇️ CSV 내보내기</button>
+  <button class="btn-line" id="exportJson">JSON</button>
+  <button class="btn-danger" id="clearAll">전체 삭제</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const LS = { recs:'aiv_records', cfg:'aiv_config' };
+  const $ = id => document.getElementById(id);
+  let records = [];
+  let html5qr = null;
+  let scanning = false;
+  let lastScan = { code:'', t:0 };
+
+  // ---- config persistence ----
+  function loadCfg(){
+    try{ const c = JSON.parse(localStorage.getItem(LS.cfg)||'{}');
+      $('inspector').value = c.inspector||'';
+      $('location').value = c.location||'';
+      $('webhook').value = c.webhook||'';
+      if(c.defaultStatus) $('defaultStatus').value = c.defaultStatus;
+    }catch(e){}
+  }
+  function saveCfg(){
+    localStorage.setItem(LS.cfg, JSON.stringify({
+      inspector:$('inspector').value.trim(),
+      location:$('location').value.trim(),
+      webhook:$('webhook').value.trim(),
+      defaultStatus:$('defaultStatus').value
+    }));
+  }
+  ['inspector','location','webhook','defaultStatus'].forEach(id=>$(id).addEventListener('change',saveCfg));
+
+  // ---- records persistence ----
+  function loadRecs(){ try{ records = JSON.parse(localStorage.getItem(LS.recs)||'[]'); }catch(e){ records=[]; } }
+  function saveRecs(){ localStorage.setItem(LS.recs, JSON.stringify(records)); render(); }
+
+  function nowStr(){
+    const d = new Date();
+    const p = n => String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+  }
+
+  function toast(msg, type){
+    const t = $('toast'); t.textContent = msg; t.className='toast show '+(type||'');
+    setTimeout(()=>{ t.className='toast'; }, 1600);
+  }
+
+  function vibrate(){ if(navigator.vibrate) navigator.vibrate(60); }
+
+  function statusPill(s){
+    const map={'정상':'ok','파손':'bad','이동필요':'move','미확인':'mid'};
+    return '<span class="pill '+(map[s]||'mid')+'">'+s+'</span>';
+  }
+
+  function addRecord(code){
+    code = (code||'').trim();
+    if(!code) return;
+    const now = Date.now();
+    // de-dup: same code within 3s ignored (prevents continuous-scan dupes)
+    if(lastScan.code===code && (now-lastScan.t)<3000){ return; }
+    lastScan = { code, t: now };
+    const rec = {
+      id: now+'-'+Math.random().toString(36).slice(2,7),
+      asset: code,
+      status: $('defaultStatus').value,
+      location: $('location').value.trim(),
+      inspector: $('inspector').value.trim(),
+      time: nowStr(),
+      note: ''
+    };
+    records.unshift(rec);
+    saveRecs();
+    vibrate();
+    toast('✓ '+code, 'ok');
+    sendWebhook(rec);
+  }
+
+  function sendWebhook(rec){
+    const url = $('webhook').value.trim();
+    if(!url) return;
+    fetch(url, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        '자산번호':rec.asset,'실사일시':rec.time,'실사자':rec.inspector,
+        '위치':rec.location,'상태':rec.status,'비고':rec.note
+      })
+    }).then(r=>{ if(!r.ok) toast('Webhook 응답 오류 '+r.status,'bad'); })
+      .catch(()=>toast('Webhook 전송 실패','bad'));
+  }
+
+  function render(){
+    const tb = $('tbody'); tb.innerHTML='';
+    records.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><span class="mono">'+escapeHtml(r.asset)+'</span></td>'+
+        '<td><select class="st" data-id="'+r.id+'" data-f="status">'+
+          ['정상','파손','이동필요','미확인'].map(s=>'<option '+(s===r.status?'selected':'')+'>'+s+'</option>').join('')+
+        '</select></td>'+
+        '<td><input class="edit-in" style="width:80px" data-id="'+r.id+'" data-f="location" value="'+escapeAttr(r.location)+'"/></td>'+
+        '<td class="small">'+r.time.slice(5)+'</td>'+
+        '<td><button class="del" data-del="'+r.id+'">삭제</button></td>';
+      tb.appendChild(tr);
+    });
+    // counts
+    $('cntTotal').textContent = records.length;
+    $('cntUniq').textContent = new Set(records.map(r=>r.asset)).size;
+    $('cntIssue').textContent = records.filter(r=>r.status!=='정상').length;
+    $('emptyNote').style.display = records.length? 'none':'block';
+    $('savedNote').textContent = records.length? '('+records.length+'건 저장됨)':'';
+  }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+  // table edit handlers
+  $('tbody').addEventListener('change', e=>{
+    const el = e.target;
+    const id = el.getAttribute('data-id'); const f = el.getAttribute('data-f');
+    if(id && f){ const r = records.find(x=>x.id===id); if(r){ r[f]=el.value; saveRecs(); } }
+  });
+  $('tbody').addEventListener('click', e=>{
+    const id = e.target.getAttribute('data-del');
+    if(id){ records = records.filter(x=>x.id!==id); saveRecs(); }
+  });
+
+  // ---- scanner ----
+  function startScan(){
+    saveCfg();
+    if(!window.isSecureContext){
+      $('scanStatus').innerHTML = '<b style="color:#dc2626">카메라를 켜수 없습니다.</b><br>이 파일을 <b>https:// 주소</b>로 열어야 카메라가 동작합니다.<br>(파일을 직접 연 경우 / 카카오톡·인앱 브라우저는 차단됨)';
+      toast('https 주소로 열어주세요','bad');
+      return;
+    }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      $('scanStatus').textContent = '이 브라우저는 카메라를 지원하지 않습니다. Safari(아이폰)/Chrome(안드로이드)에서 열어주세요.';
+      toast('Safari/Chrome에서 열어주세요','bad');
+      return;
+    }
+    if(!window.Html5Qrcode){ toast('스캐너 로딩 실패(인터넷 확인)','bad'); return; }
+    html5qr = new Html5Qrcode('reader');
+    const config = {
+      fps: 10,
+      qrbox: { width: 260, height: 140 },
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR
+      ]
+    };
+    html5qr.start({ facingMode: 'environment' }, config,
+      (decoded)=>{ addRecord(decoded); },
+      ()=>{}
+    ).then(()=>{
+      scanning = true;
+      $('startBtn').classList.add('hidden');
+      $('stopBtn').classList.remove('hidden');
+      $('scanStatus').textContent = '스캔 중… 바코드를 화면 안에 맞추세요.';
+    }).catch(err=>{
+      var name = (err && err.name) ? err.name : String(err);
+      var msg;
+      if(name==='NotAllowedError'){
+        msg = '카메라 권한이 거부됐습니다. ① 주소가 https인지 확인 ② 브라우저 설정에서 이 사이트의 카메라 권한을 "허용"으로 변경 후 다시 시도하세요. (인앱 브라우저는 차단되니 Safari/Chrome으로 열세요)';
+      } else if(name==='NotFoundError'){
+        msg = '사용 가능한 카메라를 찾지 못했습니다.';
+      } else {
+        msg = '카메라 시작 실패: '+name;
+      }
+      $('scanStatus').innerHTML = '<b style="color:#dc2626">'+msg+'</b>';
+      toast('카메라 시작 실패','bad');
+    });
+  }
+  function stopScan(){
+    if(html5qr && scanning){
+      html5qr.stop().then(()=>{ html5qr.clear(); scanning=false;
+        $('startBtn').classList.remove('hidden'); $('stopBtn').classList.add('hidden');
+        $('scanStatus').textContent='정지됨.';
+      }).catch(()=>{});
+    }
+  }
+  $('startBtn').addEventListener('click', startScan);
+  $('stopBtn').addEventListener('click', stopScan);
+  $('manualAdd').addEventListener('click', ()=>{ addRecord($('manualCode').value); $('manualCode').value=''; });
+  $('manualCode').addEventListener('keydown', e=>{ if(e.key==='Enter'){ addRecord($('manualCode').value); $('manualCode').value=''; } });
+
+  // ---- export ----
+  function exportCsv(){
+    if(!records.length){ toast('내보낼 기록이 없습니다','bad'); return; }
+    const headers = ['자산번호','실사일시','실사자','위치','상태','비고'];
+    const rows = records.slice().reverse().map(r=>[r.asset,r.time,r.inspector,r.location,r.status,r.note]);
+    const csv = [headers].concat(rows).map(row=>row.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    download('\uFEFF'+csv, 'asset_inventory_'+stamp()+'.csv', 'text/csv;charset=utf-8;');
+  }
+  function exportJson(){
+    if(!records.length){ toast('내보낼 기록이 없습니다','bad'); return; }
+    const data = records.slice().reverse().map(r=>({자산번호:r.asset,실사일시:r.time,실사자:r.inspector,위치:r.location,상태:r.status,비고:r.note}));
+    download(JSON.stringify(data,null,2), 'asset_inventory_'+stamp()+'.json', 'application/json');
+  }
+  function stamp(){ return nowStr().replace(/[-: ]/g,'').slice(0,12); }
+  function download(content, filename, type){
+    const blob = new Blob([content], {type});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    toast('내보내기 완료','ok');
+  }
+  $('exportCsv').addEventListener('click', exportCsv);
+  $('exportJson').addEventListener('click', exportJson);
+  $('clearAll').addEventListener('click', ()=>{
+    if(confirm('모든 실사 기록을 삭제할까요? (되돌릴 수 없습니다)')){ records=[]; saveRecs(); toast('전체 삭제됨'); }
+  });
+
+  // init
+  loadCfg(); loadRecs(); render();
+  if(!window.isSecureContext){
+    $('scanStatus').innerHTML = '⚠️ 이 파일은 <b>https:// 주소</b>로 열어야 카메라가 동작합니다. (파일을 직접 열면 카메라가 차단됩니다)';
+  }
+})();
+</script>
+</body>
+</html>
